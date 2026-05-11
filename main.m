@@ -1,71 +1,56 @@
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
 
-@interface SongAIHack : NSObject
-@end
+@implementation NSObject (SongAIFinal)
 
-@implementation SongAIHack
-
-// Hàm này dùng để trả về giá trị Pro mà không gây vòng lặp vô hạn
-- (BOOL)hook_boolForKey:(NSString *)key {
-    if ([key isEqualToString:@"isPremiumUser"] || [key isEqualToString:@"premium_unlocked"] || [key isEqualToString:@"is_vip"]) {
-        return YES;
-    }
-    if ([key containsString:@"ad_unit"] || [key isEqualToString:@"show_ads"]) {
-        return NO;
-    }
-    // Gọi về hàm gốc thật sự của NSUserDefaults thông qua selector đã tráo
-    return [self hook_boolForKey:key]; 
-}
-@end
-
-// Hàm Reset ID an toàn: Chỉ đổi ID, giữ nguyên âm nhạc (Documents)
-void safeResetID() {
-    static dispatch_once_t onceToken;
-    dispatch_once(&onceToken, ^{
-        NSUserDefaults *defs = [NSUserDefaults standardUserDefaults];
-        NSString *newUUID = [[NSUUID UUID] UUIDString];
-        
-        // Ghi đè ID mới
-        [defs setObject:newUUID forKey:@"stk_idfv_key"];
-        [defs setObject:newUUID forKey:@"userID"];
-        [defs setObject:newUUID forKey:@"uuidStringFromStore"];
-        [defs setBool:YES forKey:@"IsFirstLaunch"];
-        [defs synchronize];
-        
-        // Chỉ xóa nhẹ file cache để App nhận diện ID mới, không xóa Documents
-        NSString *libPath = [NSHomeDirectory() stringByAppendingPathComponent:@"Library/Caches"];
-        [[NSFileManager defaultManager] removeItemAtPath:libPath error:nil];
-    });
-}
-
+// Hàm khởi tạo tự động chạy khi App vừa được nạp vào bộ nhớ
 __attribute__((constructor))
 static void init() {
-    // Chạy Reset ID
-    safeResetID();
+    NSUserDefaults *defs = [NSUserDefaults standardUserDefaults];
+    
+    // ---------------------------------------------------------
+    // 1. CHIẾN THUẬT RESET ID: Lấy 1 Credit mới mỗi lần mở App
+    // ---------------------------------------------------------
+    NSString *newUUID = [[NSUUID UUID] UUIDString];
+    
+    // Ghi đè các định danh cũ bằng mã ngẫu nhiên mới
+    [defs setObject:newUUID forKey:@"stk_idfv_key"];
+    [defs setObject:newUUID forKey:@"userID"];
+    [defs setObject:newUUID forKey:@"uuidStringFromStore"];
+    
+    // Đánh dấu đây là lần đầu chạy để App cấp Credit khởi nghiệp
+    [defs setBool:YES forKey:@"IsFirstLaunch"]; 
+    
+    // ---------------------------------------------------------
+    // 2. CHIẾN THUẬT PREMIUM & CHẶN ADS: Ép giá trị trực tiếp
+    // ---------------------------------------------------------
+    [defs setBool:YES forKey:@"isPremiumUser"];
+    [defs setBool:YES forKey:@"premium_unlocked"];
+    [defs setBool:NO forKey:@"show_ads"];
+    
+    // Vô hiệu hóa các mã đơn vị quảng cáo (Ad Units)
+    NSArray *adKeys = @[
+        @"ad_unit_admob_banner", 
+        @"ad_unit_admob_interstitial", 
+        @"ad_unit_admob_native", 
+        @"ad_unit_applovin_banner"
+    ];
+    for (NSString *key in adKeys) {
+        [defs setObject:@"" forKey:key];
+    }
+    
+    // Lưu các thay đổi vào bộ nhớ máy
+    [defs synchronize];
 
-    // Đánh tráo hàm an toàn (Method Swizzling)
-    static dispatch_once_t swizzleToken;
-    dispatch_once(&swizzleToken, ^{
-        Class class = [NSUserDefaults class];
-        SEL originalSelector = @selector(boolForKey:);
-        SEL swizzledSelector = @selector(hook_boolForKey:);
-
-        Method originalMethod = class_getInstanceMethod(class, originalSelector);
-        Method swizzledMethod = class_getInstanceMethod([SongAIHack class], swizzledSelector);
-
-        BOOL didAddMethod = class_addMethod(class,
-                                            originalSelector,
-                                            method_getImplementation(swizzledMethod),
-                                            method_getTypeEncoding(swizzledMethod));
-
-        if (didAddMethod) {
-            class_replaceMethod(class,
-                                swizzledSelector,
-                                method_getImplementation(originalMethod),
-                                method_getTypeEncoding(originalMethod));
-        } else {
-            method_exchangeImplementations(originalMethod, swizzledMethod);
-        }
+    // ---------------------------------------------------------
+    // 3. DỌN DẸP CACHE: Sau 3 giây để tránh xung đột gây văng App
+    // ---------------------------------------------------------
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        // Chỉ xóa Cache (Lịch sử ID), KHÔNG xóa Documents (Bài hát của bạn)
+        NSString *cachePath = [NSHomeDirectory() stringByAppendingPathComponent:@"Library/Caches"];
+        [[NSFileManager defaultManager] removeItemAtPath:cachePath error:nil];
+        
+        NSLog(@"[SongAI] ID Reset & Ads Blocked Successfully!");
     });
 }
+@end
