@@ -3,118 +3,105 @@
 #import <Security/Security.h>
 
 @interface SongAIMenu : NSObject
-@property (nonatomic, strong) UIView *buttonContainer;
-@property (nonatomic, strong) UIButton *logoButton;
+@property (nonatomic, strong) UIView *container;
+@property (nonatomic, strong) UIButton *logo;
 @end
 
 @implementation SongAIMenu
 
-static SongAIMenu *sharedMenu;
+static SongAIMenu *shared;
 
 + (void)load {
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-        sharedMenu = [[SongAIMenu alloc] init];
-        [sharedMenu setupUI];
+        shared = [SongAIMenu new];
+        [shared setup];
     });
 }
 
-- (void)setupUI {
-    UIWindow *window = [UIApplication sharedApplication].keyWindow;
-    if (!window) window = [[UIApplication sharedApplication] windows].firstObject;
-
-    // 1. Tạo Logo tròn di chuyển được
-    self.logoButton = [UIButton buttonWithType:UIButtonTypeCustom];
-    self.logoButton.frame = CGRectMake(50, 150, 50, 50);
-    self.logoButton.backgroundColor = [UIColor colorWithRed:0.0 green:0.5 blue:1.0 alpha:0.9];
-    [self.logoButton setTitle:@"AI" forState:UIControlStateNormal];
-    self.logoButton.layer.cornerRadius = 25;
-    self.logoButton.layer.shadowColor = [UIColor blackColor].CGColor;
-    self.logoButton.layer.shadowOpacity = 0.5;
+- (void)setup {
+    UIWindow *win = nil;
+    if (@available(iOS 13.0, *)) {
+        for (UIWindowScene* scene in [UIApplication sharedApplication].connectedScenes) {
+            if (scene.activationState == UISceneActivationStateForegroundActive) {
+                win = scene.windows.firstObject;
+                break;
+            }
+        }
+    }
+    if (!win) win = [UIApplication sharedApplication].keyWindow;
     
-    [self.logoButton addTarget:self action:@selector(toggleMenu) forControlEvents:UIControlEventTouchUpInside];
-    
-    UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(handlePan:)];
-    [self.logoButton addGestureRecognizer:pan];
+    self.logo = [[UIButton alloc] initWithFrame:CGRectMake(100, 100, 50, 50)];
+    self.logo.backgroundColor = [UIColor colorWithRed:0.0 green:0.6 blue:1.0 alpha:0.9];
+    [self.logo setTitle:@"AI" forState:UIControlStateNormal];
+    self.logo.layer.cornerRadius = 25;
+    self.logo.layer.zPosition = 9999;
+    [self.logo addTarget:self action:@selector(tap) forControlEvents:UIControlEventTouchUpInside];
+    [self.logo addGestureRecognizer:[[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(pan:)]];
 
-    // 2. Tạo bảng Menu (3 nút)
-    self.buttonContainer = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 160, 175)];
-    self.buttonContainer.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.95];
-    self.buttonContainer.layer.cornerRadius = 12;
-    self.buttonContainer.hidden = YES;
+    self.container = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 150, 175)];
+    self.container.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.95];
+    self.container.layer.cornerRadius = 10;
+    self.container.layer.zPosition = 9998;
+    self.container.hidden = YES;
 
-    [self addMenuButton:@"RESET ID" color:[UIColor systemRedColor] y:10 tag:1];
-    [self addMenuButton:@"NO ADS" color:[UIColor systemBlueColor] y:65 tag:2];
-    [self addMenuButton:@"UNLOCK PRO" color:[UIColor systemGreenColor] y:120 tag:3];
+    [self addBtn:@"RESET ID" col:[UIColor systemRedColor] y:10 t:1];
+    [self addBtn:@"NO ADS" col:[UIColor systemBlueColor] y:65 t:2];
+    [self addBtn:@"UNLOCK PRO" col:[UIColor systemGreenColor] y:120 t:3];
 
-    [window addSubview:self.buttonContainer];
-    [window addSubview:self.logoButton];
+    [win addSubview:self.container];
+    [win addSubview:self.logo];
 }
 
-- (void)addMenuButton:(NSString *)title color:(UIColor *)color y:(CGFloat)y tag:(NSInteger)tag {
-    UIButton *btn = [UIButton buttonWithType:UIButtonTypeSystem];
-    btn.frame = CGRectMake(10, y, 140, 45);
-    [btn setTitle:title forState:UIControlStateNormal];
-    [btn setBackgroundColor:color];
-    [btn setTitleColor:[UIColor whiteColor] forState:UIControlStateNormal];
-    btn.layer.cornerRadius = 8;
-    btn.tag = tag;
-    [btn addTarget:self action:@selector(actionPressed:) forControlEvents:UIControlEventTouchUpInside];
-    [self.buttonContainer addSubview:btn];
+- (void)addBtn:(NSString *)title col:(UIColor *)col y:(CGFloat)y t:(NSInteger)t {
+    UIButton *b = [[UIButton alloc] initWithFrame:CGRectMake(10, y, 130, 45)];
+    [b setTitle:title forState:UIControlStateNormal];
+    b.backgroundColor = col;
+    b.layer.cornerRadius = 8;
+    b.tag = t;
+    [b addTarget:self action:@selector(click:) forControlEvents:UIControlEventTouchUpInside];
+    [self.container addSubview:b];
 }
 
-- (void)handlePan:(UIPanGestureRecognizer *)pan {
-    CGPoint translation = [pan translationInView:pan.view.superview];
-    pan.view.center = CGPointMake(pan.view.center.x + translation.x, pan.view.center.y + translation.y);
-    [pan setTranslation:CGPointZero inView:pan.view.superview];
-    if (!self.buttonContainer.hidden) [self updateMenuPos];
+- (void)pan:(UIPanGestureRecognizer *)p {
+    CGPoint loc = [p translationInView:p.view.superview];
+    p.view.center = CGPointMake(p.view.center.x + loc.x, p.view.center.y + loc.y);
+    [p setTranslation:CGPointZero inView:p.view.superview];
+    self.container.center = CGPointMake(self.logo.center.x, self.logo.center.y + 120);
 }
 
-- (void)toggleMenu {
-    self.buttonContainer.hidden = !self.buttonContainer.hidden;
-    [self updateMenuPos];
+- (void)tap { 
+    self.container.hidden = !self.container.hidden; 
+    self.container.center = CGPointMake(self.logo.center.x, self.logo.center.y + 120); 
 }
 
-- (void)updateMenuPos {
-    self.buttonContainer.center = CGPointMake(self.logoButton.center.x, self.logoButton.center.y + 120);
-}
-
-- (void)actionPressed:(UIButton *)sender {
-    if (sender.tag == 1) { // RESET ID & DATA
-        NSString *home = NSHomeDirectory();
+- (void)click:(UIButton *)s {
+    if (s.tag == 1) {
+        NSString *h = NSHomeDirectory();
         NSFileManager *fm = [NSFileManager defaultManager];
         for (NSString *f in @[@"Documents", @"Library", @"tmp"]) {
-            [fm removeItemAtPath:[home stringByAppendingPathComponent:f] error:nil];
+            [fm removeItemAtPath:[h stringByAppendingPathComponent:f] error:nil];
         }
-        // Xóa Keychain
-        NSDictionary *spec = @{(__bridge id)kSecClass: (__bridge id)kSecClassGenericPassword};
-        SecItemDelete((__bridge CFDictionaryRef)spec);
+        NSDictionary *q = @{(__bridge id)kSecClass: (__bridge id)kSecClassGenericPassword};
+        SecItemDelete((__bridge CFDictionaryRef)q);
         exit(0);
-    } 
-    else if (sender.tag == 2) { // THÔNG BÁO TẮT ADS
-        [sender setTitle:@"ADS DISABLED" forState:UIControlStateNormal];
-        sender.enabled = NO;
-    }
-    else if (sender.tag == 3) { // FAKE PREMIUM
-        NSUserDefaults *defs = [NSUserDefaults standardUserDefaults];
-        [defs setBool:YES forKey:@"isPremiumUser"];
-        [defs setBool:YES forKey:@"aisong_00899_trial_3d_weekly"];
-        [defs synchronize];
-        [sender setTitle:@"PRO UNLOCKED" forState:UIControlStateNormal];
+    } else if (s.tag == 3) {
+        [[NSUserDefaults standardUserDefaults] setBool:YES forKey:@"isPremiumUser"];
+        [[NSUserDefaults standardUserDefaults] setBool:YES forKey:@"aisong_00899_trial_3d_weekly"];
+        [[NSUserDefaults standardUserDefaults] synchronize];
+        [s setTitle:@"SUCCESS" forState:UIControlStateNormal];
     }
 }
 @end
 
-// HOOK HỆ THỐNG ĐỂ CHẶN ADS VÀ ÉP PRO
-static id (*orig_objectForKey)(id, SEL, id);
-id hook_objectForKey(id self, SEL _cmd, NSString *key) {
+static id (*o_obj)(id, SEL, id);
+id h_obj(id self, SEL _cmd, NSString *key) {
     if ([key containsString:@"ad_unit"] || [key containsString:@"ads_enabled"]) return @"";
     if ([key isEqualToString:@"isPremiumUser"]) return @YES;
-    return orig_objectForKey(self, _cmd, key);
+    return o_obj(self, _cmd, key);
 }
 
-__attribute__((constructor))
-static void init() {
+__attribute__((constructor)) static void init() {
     Method m = class_getInstanceMethod([NSUserDefaults class], @selector(objectForKey:));
-    orig_objectForKey = (id (*)(id, SEL, id))method_getImplementation(m);
-    method_setImplementation(m, (IMP)hook_objectForKey);
+    o_obj = (id (*)(id, SEL, id))method_getImplementation(m);
+    method_setImplementation(m, (IMP)h_obj);
 }
