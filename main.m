@@ -6,58 +6,66 @@
 
 @implementation SongAIHack
 
-// 1. Đánh chặn để ép App tin là Premium & Tắt Ads
+// Hàm này dùng để trả về giá trị Pro mà không gây vòng lặp vô hạn
 - (BOOL)hook_boolForKey:(NSString *)key {
-    if ([key isEqualToString:@"isPremiumUser"] || [key isEqualToString:@"premium_unlocked"]) {
+    if ([key isEqualToString:@"isPremiumUser"] || [key isEqualToString:@"premium_unlocked"] || [key isEqualToString:@"is_vip"]) {
         return YES;
     }
     if ([key containsString:@"ad_unit"] || [key isEqualToString:@"show_ads"]) {
         return NO;
     }
-    return [self hook_boolForKey:key];
+    // Gọi về hàm gốc thật sự của NSUserDefaults thông qua selector đã tráo
+    return [self hook_boolForKey:key]; 
 }
 @end
 
-// 2. Hàm chỉ Reset ID mà không mất bài hát đã tạo
-void resetIDOnly() {
-    NSUserDefaults *defs = [NSUserDefaults standardUserDefaults];
-    
-    // Kiểm tra nếu đã dùng hết Credit (hoặc đơn giản là mỗi lần mở app)
-    // Tạo ID mới ngẫu nhiên
-    NSString *newUUID = [[NSUUID UUID] UUIDString];
-    
-    // Ghi đè các ID định danh mà app dùng
-    [defs setObject:newUUID forKey:@"stk_idfv_key"];
-    [defs setObject:newUUID forKey:@"userID"];
-    [defs setObject:newUUID forKey:@"uuidStringFromStore"];
-    
-    // Reset trạng thái Onboarding để app cấp lại Credit như người mới
-    [defs setBool:YES forKey:@"IsFirstLaunch"]; 
-    
-    [defs synchronize];
-    
-    // Xóa file chứa ID cũ trong Library/Preferences nhưng KHÔNG xóa Documents (nơi chứa nhạc)
-    NSString *prefPath = [NSHomeDirectory() stringByAppendingPathComponent:@"Library/Preferences"];
-    NSFileManager *fm = [NSFileManager defaultManager];
-    NSArray *files = [fm contentsOfDirectoryAtPath:prefPath error:nil];
-    
-    for (NSString *file in files) {
-        // Chỉ xóa file cấu hình của App, không xóa folder nhạc
-        if ([file containsString:[[NSBundle mainBundle] bundleIdentifier]]) {
-            [fm removeItemAtPath:[prefPath stringByAppendingPathComponent:file] error:nil];
-        }
-    }
+// Hàm Reset ID an toàn: Chỉ đổi ID, giữ nguyên âm nhạc (Documents)
+void safeResetID() {
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        NSUserDefaults *defs = [NSUserDefaults standardUserDefaults];
+        NSString *newUUID = [[NSUUID UUID] UUIDString];
+        
+        // Ghi đè ID mới
+        [defs setObject:newUUID forKey:@"stk_idfv_key"];
+        [defs setObject:newUUID forKey:@"userID"];
+        [defs setObject:newUUID forKey:@"uuidStringFromStore"];
+        [defs setBool:YES forKey:@"IsFirstLaunch"];
+        [defs synchronize];
+        
+        // Chỉ xóa nhẹ file cache để App nhận diện ID mới, không xóa Documents
+        NSString *libPath = [NSHomeDirectory() stringByAppendingPathComponent:@"Library/Caches"];
+        [[NSFileManager defaultManager] removeItemAtPath:libPath error:nil];
+    });
 }
 
 __attribute__((constructor))
 static void init() {
-    // Thực hiện đổi ID ngay khi mở
-    resetIDOnly();
+    // Chạy Reset ID
+    safeResetID();
 
-    // Hook để bẻ khóa các tính năng
-    Method original = class_getInstanceMethod([NSUserDefaults class], @selector(boolForKey:));
-    Method swizzled = class_getInstanceMethod([SongAIHack class], @selector(hook_boolForKey:));
-    if (original && swizzled) {
-        method_exchangeImplementations(original, swizzled);
-    }
+    // Đánh tráo hàm an toàn (Method Swizzling)
+    static dispatch_once_t swizzleToken;
+    dispatch_once(&swizzleToken, ^{
+        Class class = [NSUserDefaults class];
+        SEL originalSelector = @selector(boolForKey:);
+        SEL swizzledSelector = @selector(hook_boolForKey:);
+
+        Method originalMethod = class_getInstanceMethod(class, originalSelector);
+        Method swizzledMethod = class_getInstanceMethod([SongAIHack class], swizzledSelector);
+
+        BOOL didAddMethod = class_addMethod(class,
+                                            originalSelector,
+                                            method_getImplementation(swizzledMethod),
+                                            method_getTypeEncoding(swizzledMethod));
+
+        if (didAddMethod) {
+            class_replaceMethod(class,
+                                swizzledSelector,
+                                method_getImplementation(originalMethod),
+                                method_getTypeEncoding(originalMethod));
+        } else {
+            method_exchangeImplementations(originalMethod, swizzledMethod);
+        }
+    });
 }
