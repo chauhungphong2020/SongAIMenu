@@ -1,6 +1,7 @@
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
 #import <Security/Security.h>
+#import <CoreGraphics/CoreGraphics.h>
 
 @interface SongAIMenu : NSObject
 @property (nonatomic, strong) UIView *container;
@@ -29,8 +30,9 @@ static SongAIMenu *shared;
         }
     }
     if (!win) win = [UIApplication sharedApplication].keyWindow;
+    if (!win) return; // Tránh crash nếu chưa có window
     
-    self.logo = [[UIButton alloc] initWithFrame:CGRectMake(100, 100, 50, 50)];
+    self.logo = [[UIButton alloc] initWithFrame:CGRectMake(100, 150, 50, 50)];
     self.logo.backgroundColor = [UIColor colorWithRed:0.0 green:0.6 blue:1.0 alpha:0.9];
     [self.logo setTitle:@"AI" forState:UIControlStateNormal];
     self.logo.layer.cornerRadius = 25;
@@ -65,7 +67,7 @@ static SongAIMenu *shared;
 - (void)pan:(UIPanGestureRecognizer *)p {
     CGPoint loc = [p translationInView:p.view.superview];
     p.view.center = CGPointMake(p.view.center.x + loc.x, p.view.center.y + loc.y);
-    [p setTranslation:CGPointZero inView:p.view.superview];
+    [p setTranslation:CGPointZero inView:p.view.superview]; // CGPointZero giờ đã có framework CoreGraphics lo
     self.container.center = CGPointMake(self.logo.center.x, self.logo.center.y + 120);
 }
 
