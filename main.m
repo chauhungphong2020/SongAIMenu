@@ -1,7 +1,6 @@
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
 #import <Security/Security.h>
-#import <CoreGraphics/CoreGraphics.h>
 
 @interface SongAIMenu : NSObject
 @property (nonatomic, strong) UIView *container;
@@ -13,52 +12,57 @@
 static SongAIMenu *shared;
 
 + (void)load {
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(5 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+    // Tăng thời gian chờ lên 7 giây để app load xong hoàn toàn database nội bộ
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(7 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         shared = [SongAIMenu new];
         [shared setup];
     });
 }
 
 - (void)setup {
+    // Cách lấy Window chắc chắn nhất cho iOS đời mới
     UIWindow *win = nil;
-    if (@available(iOS 13.0, *)) {
-        for (UIWindowScene* scene in [UIApplication sharedApplication].connectedScenes) {
-            if (scene.activationState == UISceneActivationStateForegroundActive) {
-                win = scene.windows.firstObject;
-                break;
-            }
-        }
+    for (UIWindow *w in [UIApplication sharedApplication].windows) {
+        if (w.isKeyWindow) { win = w; break; }
     }
-    if (!win) win = [UIApplication sharedApplication].keyWindow;
-    if (!win) return; // Tránh crash nếu chưa có window
-    
-    self.logo = [[UIButton alloc] initWithFrame:CGRectMake(100, 150, 50, 50)];
-    self.logo.backgroundColor = [UIColor colorWithRed:0.0 green:0.6 blue:1.0 alpha:0.9];
+    if (!win) win = [[UIApplication sharedApplication] keyWindow];
+    if (!win) return;
+
+    // Thiết lập Logo
+    self.logo = [[UIButton alloc] initWithFrame:CGRectMake(50, 150, 55, 55)];
+    self.logo.backgroundColor = [UIColor colorWithRed:0.0 green:0.5 blue:1.0 alpha:0.9];
     [self.logo setTitle:@"AI" forState:UIControlStateNormal];
-    self.logo.layer.cornerRadius = 25;
-    self.logo.layer.zPosition = 9999;
+    self.logo.titleLabel.font = [UIFont boldSystemFontOfSize:18];
+    self.logo.layer.cornerRadius = 27.5;
+    self.logo.layer.zPosition = 10000;
+    self.logo.clipsToBounds = YES;
+    
     [self.logo addTarget:self action:@selector(tap) forControlEvents:UIControlEventTouchUpInside];
     [self.logo addGestureRecognizer:[[UIPanGestureRecognizer alloc] initWithTarget:self action:@selector(pan:)]];
 
-    self.container = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 150, 175)];
-    self.container.backgroundColor = [UIColor colorWithWhite:0.1 alpha:0.95];
-    self.container.layer.cornerRadius = 10;
-    self.container.layer.zPosition = 9998;
+    // Thiết lập Bảng nút
+    self.container = [[UIView alloc] initWithFrame:CGRectMake(0, 0, 160, 180)];
+    self.container.backgroundColor = [UIColor colorWithWhite:0.05 alpha:0.95];
+    self.container.layer.cornerRadius = 15;
+    self.container.layer.borderWidth = 1;
+    self.container.layer.borderColor = [UIColor cyanColor].CGColor;
+    self.container.layer.zPosition = 9999;
     self.container.hidden = YES;
 
-    [self addBtn:@"RESET ID" col:[UIColor systemRedColor] y:10 t:1];
-    [self addBtn:@"NO ADS" col:[UIColor systemBlueColor] y:65 t:2];
-    [self addBtn:@"UNLOCK PRO" col:[UIColor systemGreenColor] y:120 t:3];
+    [self addBtn:@"RESET DATA" col:[UIColor systemRedColor] y:15 t:1];
+    [self addBtn:@"NO ADS" col:[UIColor systemBlueColor] y:70 t:2];
+    [self addBtn:@"ACTIVATE PRO" col:[UIColor systemGreenColor] y:125 t:3];
 
     [win addSubview:self.container];
     [win addSubview:self.logo];
 }
 
 - (void)addBtn:(NSString *)title col:(UIColor *)col y:(CGFloat)y t:(NSInteger)t {
-    UIButton *b = [[UIButton alloc] initWithFrame:CGRectMake(10, y, 130, 45)];
+    UIButton *b = [[UIButton alloc] initWithFrame:CGRectMake(10, y, 140, 45)];
     [b setTitle:title forState:UIControlStateNormal];
+    b.titleLabel.font = [UIFont boldSystemFontOfSize:14];
     b.backgroundColor = col;
-    b.layer.cornerRadius = 8;
+    b.layer.cornerRadius = 10;
     b.tag = t;
     [b addTarget:self action:@selector(click:) forControlEvents:UIControlEventTouchUpInside];
     [self.container addSubview:b];
@@ -67,38 +71,60 @@ static SongAIMenu *shared;
 - (void)pan:(UIPanGestureRecognizer *)p {
     CGPoint loc = [p translationInView:p.view.superview];
     p.view.center = CGPointMake(p.view.center.x + loc.x, p.view.center.y + loc.y);
-    [p setTranslation:CGPointZero inView:p.view.superview]; // CGPointZero giờ đã có framework CoreGraphics lo
-    self.container.center = CGPointMake(self.logo.center.x, self.logo.center.y + 120);
+    [p setTranslation:CGPointZero inView:p.view.superview];
+    self.container.center = CGPointMake(self.logo.center.x, self.logo.center.y + 125);
 }
 
 - (void)tap { 
     self.container.hidden = !self.container.hidden; 
-    self.container.center = CGPointMake(self.logo.center.x, self.logo.center.y + 120); 
+    self.container.center = CGPointMake(self.logo.center.x, self.logo.center.y + 125); 
 }
 
 - (void)click:(UIButton *)s {
-    if (s.tag == 1) {
+    if (s.tag == 1) { // Lệnh Reset triệt để
         NSString *h = NSHomeDirectory();
         NSFileManager *fm = [NSFileManager defaultManager];
+        // Xóa sạch các folder
         for (NSString *f in @[@"Documents", @"Library", @"tmp"]) {
-            [fm removeItemAtPath:[h stringByAppendingPathComponent:f] error:nil];
+            NSString *p = [h stringByAppendingPathComponent:f];
+            [fm removeItemAtPath:p error:nil];
+            [fm createDirectoryAtPath:p withIntermediateDirectories:YES attributes:nil error:nil];
         }
+        // Xóa sạch Keychain
         NSDictionary *q = @{(__bridge id)kSecClass: (__bridge id)kSecClassGenericPassword};
         SecItemDelete((__bridge CFDictionaryRef)q);
-        exit(0);
-    } else if (s.tag == 3) {
-        [[NSUserDefaults standardUserDefaults] setBool:YES forKey:@"isPremiumUser"];
-        [[NSUserDefaults standardUserDefaults] setBool:YES forKey:@"aisong_00899_trial_3d_weekly"];
+        
+        // Reset UserDefaults
+        NSString *bundleId = [[NSBundle mainBundle] bundleIdentifier];
+        [[NSUserDefaults standardUserDefaults] removePersistentDomainForName:bundleId];
         [[NSUserDefaults standardUserDefaults] synchronize];
-        [s setTitle:@"SUCCESS" forState:UIControlStateNormal];
+        
+        exit(0);
+    } else if (s.tag == 3) { // Ép Premium mạnh hơn
+        NSUserDefaults *d = [NSUserDefaults standardUserDefaults];
+        [d setBool:YES forKey:@"isPremiumUser"];
+        [d setBool:YES forKey:@"premium_unlocked"];
+        [d setBool:NO forKey:@"show_ads"];
+        [d setObject:@"aisong_00899_trial_3d_weekly" forKey:@"active_subscription_id"];
+        [d synchronize];
+        
+        [s setTitle:@"PRO ACTIVE!" forState:UIControlStateNormal];
+        s.backgroundColor = [UIColor grayColor];
     }
 }
 @end
 
+// HOOK - ĐÁNH CHẶN TRỰC TIẾP LỆNH ĐỌC DỮ LIỆU CỦA APP
 static id (*o_obj)(id, SEL, id);
 id h_obj(id self, SEL _cmd, NSString *key) {
-    if ([key containsString:@"ad_unit"] || [key containsString:@"ads_enabled"]) return @"";
-    if ([key isEqualToString:@"isPremiumUser"]) return @YES;
+    // Chặn Ads
+    if ([key containsString:@"ad_unit"] || [key containsString:@"ads_enabled"] || [key isEqualToString:@"show_ads"]) {
+        return @""; 
+    }
+    // Ép Premium
+    if ([key isEqualToString:@"isPremiumUser"] || [key isEqualToString:@"premium_unlocked"]) {
+        return @YES;
+    }
     return o_obj(self, _cmd, key);
 }
 
