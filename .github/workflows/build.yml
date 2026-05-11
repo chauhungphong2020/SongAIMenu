@@ -1,19 +1,16 @@
 name: Build Menu Dylib
 on: [push]
-
 jobs:
   build:
     runs-on: macos-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
+      - uses: actions/checkout@v4
       - name: Compile
         run: |
-          xcrun -sdk iphoneos clang -dynamiclib -arch arm64 main.m -o SongAIMenu.dylib -framework UIKit -framework Foundation -framework Security -miphoneos-version-min=14.0
-          
-      - name: Upload
-        uses: actions/upload-artifact@v4
+          xcrun -sdk iphoneos clang -dynamiclib -arch arm64 main.m -o SongAIMenu.dylib \
+          -framework UIKit -framework Foundation -framework Security -framework CoreGraphics \
+          -miphoneos-version-min=13.0
+      - uses: actions/upload-artifact@v4
         with:
           name: SongAIMenu
           path: SongAIMenu.dylib
